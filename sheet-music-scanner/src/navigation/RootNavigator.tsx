@@ -152,6 +152,33 @@ const SettingsStackNavigator = () => {
   );
 };
 
+// Help Stack Navigator
+const HelpStackNavigator = () => {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: COLORS.background,
+          borderBottomColor: COLORS.border,
+          borderBottomWidth: 1,
+        },
+        headerTitleStyle: {
+          fontWeight: '600',
+          fontSize: 18,
+          color: COLORS.text,
+        },
+        headerTintColor: COLORS.primary,
+      }}
+    >
+      <Stack.Screen
+        name="HelpScreen"
+        component={HelpScreen}
+        options={{ title: 'Help' }}
+      />
+    </Stack.Navigator>
+  );
+};
+
 // Bottom Tab Navigator
 const BottomTabNavigator = () => {
   const [libraryCount, setLibraryCount] = useState(0);
@@ -226,7 +253,7 @@ const BottomTabNavigator = () => {
 
       <Tab.Screen
         name="HelpStack"
-        component={HelpScreen}
+        component={HelpStackNavigator}
         options={{
           title: 'Help',
           tabBarIcon: ({ color, size }) => (
@@ -255,16 +282,12 @@ export const RootNavigator = () => {
     try {
       const completed = await StorageService.getPreference('onboardingComplete');
       setOnboardingComplete(completed === true);
-      if (!isLoading) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     } catch (error) {
       console.error('Error checking onboarding status:', error);
       // Default to showing onboarding if we can't read preference
       setOnboardingComplete(false);
-      if (!isLoading) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   };
 

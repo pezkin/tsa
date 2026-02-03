@@ -11,7 +11,7 @@
  */
 
 import { Alert } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'expo-image-manipulator';
 import { MusicData, Measure, Note } from '@utils/types';
 

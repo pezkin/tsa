@@ -13,10 +13,12 @@ import {
 import Slider from '@react-native-community/slider';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, FILE_PATHS } from '@utils/constants';
 import { generateId } from '@utils/helpers';
+import { StorageService } from '@services/storage';
+import { ScannedItem } from '@utils/types';
 
 interface ImageEditorScreenProps {
   route: any;
@@ -59,22 +61,34 @@ const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({ route, navigation
     try {
       setIsProcessing(true);
 
+      // Verify the source image exists
+      const sourceInfo = await FileSystem.getInfoAsync(processedUri);
+      if (!sourceInfo.exists) {
+        throw new Error('Source image file not found');
+      }
+
       // Create directory if it doesn't exist
-      const directory = `${FileSystem.documentDirectory}${FILE_PATHS.SCANS}`;
-      const dirInfo = await FileSystem.getInfoAsync(directory);
+      const scansDir = `${FileSystem.documentDirectory}${FILE_PATHS.SCANS}`;
+      const dirInfo = await FileSystem.getInfoAsync(scansDir);
 
       if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(scansDir, { intermediates: true });
       }
 
       // Save image
       const filename = `scan_${generateId()}.jpg`;
-      const filepath = `${directory}${filename}`;
+      const filepath = `${scansDir}${filename}`;
 
       await FileSystem.copyAsync({
         from: processedUri,
         to: filepath,
       });
+
+      // Verify the file was saved
+      const savedFileInfo = await FileSystem.getInfoAsync(filepath);
+      if (!savedFileInfo.exists) {
+        throw new Error('Failed to save image file');
+      }
 
       // Create thumbnail
       const thumbnail = await ImageManipulator.manipulateAsync(
@@ -83,30 +97,52 @@ const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({ route, navigation
         { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
       );
 
-      const thumbnailPath = `${FileSystem.documentDirectory}${FILE_PATHS.THUMBNAILS}thumb_${filename}`;
-      const thumbnailDir = `${FileSystem.documentDirectory}${FILE_PATHS.THUMBNAILS}`;
-      const thumbDirInfo = await FileSystem.getInfoAsync(thumbnailDir);
+      const thumbnailsDir = `${FileSystem.documentDirectory}${FILE_PATHS.THUMBNAILS}`;
+      const thumbDirInfo = await FileSystem.getInfoAsync(thumbnailsDir);
 
       if (!thumbDirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(thumbnailDir, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(thumbnailsDir, { intermediates: true });
       }
+
+      const thumbnailPath = `${thumbnailsDir}thumb_${filename}`;
 
       await FileSystem.copyAsync({
         from: thumbnail.uri,
         to: thumbnailPath,
       });
 
+      // Verify thumbnail was saved
+      const thumbFileInfo = await FileSystem.getInfoAsync(thumbnailPath);
+      if (!thumbFileInfo.exists) {
+        throw new Error('Failed to save thumbnail file');
+      }
+
+      // Create scanned item object
+      const itemId = generateId();
+      const scannedItem: ScannedItem = {
+        id: itemId,
+        filename: filename,
+        imagePath: filepath,
+        thumbnail: thumbnailPath,
+        dateScanned: Date.now(),
+        notes: '',
+        playCount: 0,
+        processingTime: 0,
+      };
+
+      // Add item to storage
+      await StorageService.addScannedItem(scannedItem);
+
       // Navigate to viewer with saved item
       navigation.navigate('Viewer', {
-        itemId: generateId(),
-        imagePath: filepath,
-        thumbnailPath: thumbnailPath,
+        itemId: itemId,
       });
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error saving image:', error);
-      Alert.alert('Error', 'Failed to save image');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Error', `Failed to save image: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }

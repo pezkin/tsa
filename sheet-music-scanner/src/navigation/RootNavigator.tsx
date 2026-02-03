@@ -24,6 +24,7 @@ import ViewerScreen from '@screens/ViewerScreen';
 import PhotoPickerScreen from '@screens/PhotoPickerScreen';
 import FilePickerScreen from '@screens/FilePickerScreen';
 import OnboardingScreen from '@screens/OnboardingScreen';
+import { OMRScannerScreen } from '@screens/OMRScannerScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -85,6 +86,14 @@ const HomeStackNavigator = () => {
         component={FilePickerScreen}
         options={{
           title: 'Select Files',
+        }}
+      />
+      <Stack.Screen
+        name="OMRScanner"
+        component={OMRScannerScreen}
+        options={{
+          title: 'Music Sheet Scanner',
+          headerShown: true,
         }}
       />
     </Stack.Navigator>

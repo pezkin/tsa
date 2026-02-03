@@ -18,7 +18,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { ocrPipeline, PipelineResult, ClassifiedNote } from '../services/OCRPipeline';
 import { soundFontPlayer } from '../services/SoundFontPlayer';
-import { VoiceControls } from './VoiceControls';
+import { VoiceControls } from '../components/VoiceControls';
 import { midiGenerator } from '../services/MIDIGenerator';
 
 interface ScanState {

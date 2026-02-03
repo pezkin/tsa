@@ -62,7 +62,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Tsali Scanner needs camera access to scan sheet music"
+          "cameraPermission": "Tsali Scanner needs camera access to scan sheet music and detect musical notes"
         }
       ],
       [

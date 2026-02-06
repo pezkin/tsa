@@ -1,0 +1,3 @@
+
+# Prevent accidental commits of files with Windows-invalid characters
+*:*

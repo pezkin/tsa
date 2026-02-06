@@ -44,16 +44,16 @@ export async function resizeImage(
 
 /**
  * Convert image to grayscale
- * Uses expo-image-manipulator's desaturation via brightness/contrast adjustment.
- * For a true grayscale conversion, the image is processed through manipulateAsync
- * which leverages native image processing on each platform.
+ * Note: expo-image-manipulator does not support direct grayscale conversion.
+ * This processes the image through manipulateAsync which ensures consistent
+ * format handling. For true grayscale conversion, a native module like
+ * react-native-skia with a desaturation color matrix filter would be needed.
  */
 export async function toGrayscale(imageUri: string): Promise<string> {
   try {
-    // expo-image-manipulator doesn't have a direct grayscale filter,
-    // but we can achieve a desaturated effect by outputting as JPEG
-    // with reduced quality which strips color information.
-    // A more accurate approach would use react-native-skia's color matrix.
+    // expo-image-manipulator does not have a grayscale filter.
+    // Process through manipulateAsync for consistent format, but the
+    // output remains in color. True grayscale requires a native solution.
     const result = await manipulateAsync(
       imageUri,
       [],
@@ -104,12 +104,16 @@ export function denormalizePixels(
  * Extract RGB pixels from image file as Uint8Array
  * 
  * Uses expo-image-manipulator to resize the image and reads the
- * resulting JPEG base64 data. Since full native pixel decoding
- * requires platform-specific APIs (BitmapFactory on Android,
- * Core Graphics on iOS), this implementation extracts approximate
- * pixel values from the raw JPEG byte stream by sampling the
- * entropy-coded data. For accurate results on device, consider
- * using react-native-skia or a native module.
+ * resulting JPEG base64 data. Since JavaScript lacks a built-in
+ * JPEG decoder and full native pixel decoding requires platform-specific
+ * APIs (BitmapFactory on Android, Core Graphics on iOS), this
+ * implementation reads the raw JPEG byte stream as an approximation.
+ * 
+ * Note: The entropy-coded JPEG data does not represent actual pixel
+ * values. For production-quality pixel extraction, use a native module
+ * such as react-native-skia or expo-gl to decode the image properly.
+ * This implementation provides non-zero varied byte data that is
+ * sufficient for model input shape validation and development testing.
  */
 export async function extractImagePixels(
   imageUri: string,

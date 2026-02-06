@@ -278,19 +278,11 @@ export class TFLiteService {
 
   /**
    * Resolve require() asset to file path
-   * In Expo, require() returns an asset module ID.
-   * The Expo asset system resolves these to local file URIs at runtime.
+   * In Expo/Metro, require() for assets returns a numeric module ID
+   * that the asset system can resolve at runtime.
    */
   private resolveAssetPath(asset: number): string {
-    try {
-      // In Expo/Metro, require() for assets returns a numeric module ID
-      // that the asset system can resolve. Pass through for the TFLite
-      // loader which handles both numeric IDs and string paths.
-      return String(asset);
-    } catch (error) {
-      console.warn('Asset resolution failed, using raw value:', error);
-      return String(asset);
-    }
+    return String(asset);
   }
 }
 

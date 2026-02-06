@@ -153,8 +153,9 @@ export class OCRPipeline {
 
       return {
         imageShape: {
-          width: filteredPatches.length > 0 ? Math.max(...filteredPatches.map(p => p.x + this.preprocessor.getConfig().patchSize)) : 1024,
-          height: filteredPatches.length > 0 ? Math.max(...filteredPatches.map(p => p.y + this.preprocessor.getConfig().patchSize)) : 768,
+          // Image dimensions from preprocessor's canvas (the loadImageData target size)
+          width: patches.length > 0 ? Math.max(...patches.map(p => p.x)) + this.preprocessor.getConfig().patchSize : 1024,
+          height: patches.length > 0 ? Math.max(...patches.map(p => p.y)) + this.preprocessor.getConfig().patchSize : 768,
         },
         detectedNotes,
         classifiedNotes,
@@ -184,7 +185,7 @@ export class OCRPipeline {
         try {
           // Track which patches are in this batch
           const batchStartIdx = patchIndex;
-          const batchEndIdx = Math.min(patchIndex + batchSize, patches.length);
+          const currentBatchSize = Math.min(batchSize, patches.length - patchIndex);
 
           // Run inference on batch
           const predictions = await this.modelLoader.predict(batch as tf.Tensor);
@@ -192,30 +193,35 @@ export class OCRPipeline {
           // Parse predictions
           const predictionData = await predictions.data();
 
-          // Iterate through batch predictions
-          for (let i = 0; i < predictionData.length; i++) {
-            const confidence = predictionData[i];
+          // Calculate outputs per patch (total predictions / patches in batch)
+          const outputsPerPatch = currentBatchSize > 0
+            ? Math.floor(predictionData.length / currentBatchSize)
+            : predictionData.length;
 
-            if (confidence >= (this.options.confidenceThreshold || 0.5)) {
-              // Convert output index to MIDI note (assuming model outputs 0-127 or normalized 0-1)
-              const midiNote = this.outputToPitch(i, predictionData.length);
+          // Iterate through each patch's predictions
+          for (let patchIdx = 0; patchIdx < currentBatchSize; patchIdx++) {
+            const sourcePatch = patches[batchStartIdx + patchIdx];
+            const patchOutputStart = patchIdx * outputsPerPatch;
 
-              // Get position from the corresponding patch
-              const sourcePatchIdx = batchStartIdx + (i % (batchEndIdx - batchStartIdx));
-              const sourcePatch = patches[sourcePatchIdx];
+            for (let j = 0; j < outputsPerPatch; j++) {
+              const confidence = predictionData[patchOutputStart + j];
 
-              detectedNotes.push({
-                pitch: midiNote,
-                confidence,
-                duration: this.options.minDuration || 100,
-                x: sourcePatch?.x ?? 0,
-                y: sourcePatch?.y ?? 0,
-              });
+              if (confidence >= (this.options.confidenceThreshold || 0.5)) {
+                const midiNote = this.outputToPitch(j, outputsPerPatch);
+
+                detectedNotes.push({
+                  pitch: midiNote,
+                  confidence,
+                  duration: this.options.minDuration || 100,
+                  x: sourcePatch?.x ?? 0,
+                  y: sourcePatch?.y ?? 0,
+                });
+              }
             }
           }
 
           predictions.dispose();
-          patchIndex = batchEndIdx;
+          patchIndex += currentBatchSize;
         } catch (error) {
           console.error('Error in inference batch:', error);
           patchIndex += batchSize;

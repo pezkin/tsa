@@ -50,6 +50,7 @@ export class OCRPipeline {
   private options: PipelineOptions;
   private isInitialized = false;
   private model: tf.LayersModel | null = null;
+  private isCancelled = false;
 
   constructor(options?: PipelineOptions) {
     this.modelLoader = modelLoader;
@@ -96,6 +97,7 @@ export class OCRPipeline {
    */
   async processImage(imageURI: string): Promise<PipelineResult> {
     const startTime = Date.now();
+    this.isCancelled = false;
 
     try {
       if (!this.isReady()) {
@@ -105,6 +107,9 @@ export class OCRPipeline {
       // Step 1: Image preprocessing
       console.log('Step 1: Preprocessing image...');
       const patches = await this.preprocessor.processImageURI(imageURI);
+
+      if (this.isCancelled) throw new Error('Processing cancelled');
+
       const filteredPatches = this.preprocessor.filterPatches(
         patches,
         this.options.confidenceThreshold || 0.3
@@ -113,6 +118,8 @@ export class OCRPipeline {
       // Step 2: OCR model inference
       console.log('Step 2: Running OCR inference...');
       const detectedNotes = await this.runInference(filteredPatches);
+
+      if (this.isCancelled) throw new Error('Processing cancelled');
 
       // Step 3: Voice classification
       console.log('Step 3: Classifying voices...');
@@ -145,7 +152,10 @@ export class OCRPipeline {
       });
 
       return {
-        imageShape: { width: 1024, height: 768 }, // TODO: Get actual image dimensions
+        imageShape: {
+          width: filteredPatches.length > 0 ? Math.max(...filteredPatches.map(p => p.x + this.preprocessor.getConfig().patchSize)) : 1024,
+          height: filteredPatches.length > 0 ? Math.max(...filteredPatches.map(p => p.y + this.preprocessor.getConfig().patchSize)) : 768,
+        },
         detectedNotes,
         classifiedNotes,
         midiSequence,
@@ -166,10 +176,16 @@ export class OCRPipeline {
 
     try {
       // Batch patches
-      const batches = this.preprocessor.batchPatches(patches, 32);
+      const batchSize = 32;
+      const batches = this.preprocessor.batchPatches(patches, batchSize);
 
+      let patchIndex = 0;
       for (const batch of batches) {
         try {
+          // Track which patches are in this batch
+          const batchStartIdx = patchIndex;
+          const batchEndIdx = Math.min(patchIndex + batchSize, patches.length);
+
           // Run inference on batch
           const predictions = await this.modelLoader.predict(batch as tf.Tensor);
 
@@ -184,19 +200,25 @@ export class OCRPipeline {
               // Convert output index to MIDI note (assuming model outputs 0-127 or normalized 0-1)
               const midiNote = this.outputToPitch(i, predictionData.length);
 
+              // Get position from the corresponding patch
+              const sourcePatchIdx = batchStartIdx + (i % (batchEndIdx - batchStartIdx));
+              const sourcePatch = patches[sourcePatchIdx];
+
               detectedNotes.push({
                 pitch: midiNote,
                 confidence,
                 duration: this.options.minDuration || 100,
-                x: 0, // TODO: Get from patch position
-                y: 0,
+                x: sourcePatch?.x ?? 0,
+                y: sourcePatch?.y ?? 0,
               });
             }
           }
 
           predictions.dispose();
+          patchIndex = batchEndIdx;
         } catch (error) {
           console.error('Error in inference batch:', error);
+          patchIndex += batchSize;
           continue;
         }
       }
@@ -258,8 +280,8 @@ export class OCRPipeline {
    * Cancel processing (if async operations are in progress)
    */
   async cancel(): Promise<void> {
-    // TODO: Implement cancellation token if needed
-    console.log('Processing cancelled');
+    this.isCancelled = true;
+    console.log('Processing cancellation requested');
   }
 
   /**

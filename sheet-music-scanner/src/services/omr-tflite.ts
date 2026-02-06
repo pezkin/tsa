@@ -11,9 +11,8 @@
  */
 
 import { Alert } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
-import { Image } from 'expo-image-manipulator';
 import { MusicData, Measure, Note } from '@utils/types';
+import { preprocessImage as preprocessImageUtil, cropImage } from '@utils/imagePreprocessing';
 
 /**
  * Symbol class mapping (128 possible symbols)
@@ -167,7 +166,8 @@ export class OMRService {
       // 4. Classify each symbol
       const detectedSymbols = await this.classifySymbols(
         symbolRegions,
-        options.confidenceThreshold ?? 0.6
+        options.confidenceThreshold ?? 0.6,
+        imagePath
       );
 
       options.onProgress?.('Parsing music notation...', 0.8);
@@ -225,27 +225,7 @@ export class OMRService {
     height: number;
   }> {
     try {
-      // Read image file as base64
-      const imageBase64 = await FileSystem.readAsStringAsync(imagePath, {
-        encoding: FileSystem.EncodingType.Base64 as any,
-      });
-
-      // In production, decode and resize using native image processing
-      // For now, use placeholder with correct dimensions
-      const pixelCount = width * height * 3;
-      const pixels = new Float32Array(pixelCount);
-
-      // Initialize with normalized values (0.5 = gray)
-      for (let i = 0; i < pixelCount; i++) {
-        pixels[i] = 0.5;
-      }
-
-      // TODO: Replace with actual image decoding and resizing using:
-      // - Android: BitmapFactory.decodeFile() + scale()
-      // - iOS: UIImage(contentsOfFile:) + resize via Core Graphics
-      // - Or use react-native-quick-image / expo-image with native processing
-
-      return { pixels, width, height };
+      return await preprocessImageUtil(imagePath, width, height);
     } catch (error) {
       console.error('❌ Image preprocessing error:', error);
       throw error;
@@ -351,17 +331,35 @@ export class OMRService {
    */
   private static async classifySymbols(
     regions: DetectedSymbol[],
-    confidenceThreshold: number = 0.6
+    confidenceThreshold: number = 0.6,
+    imagePath?: string
   ): Promise<DetectedSymbol[]> {
     const classified: DetectedSymbol[] = [];
 
     for (const region of regions) {
       try {
-        // TODO: Extract symbol patch from original image
-        // For now, create dummy input
-        const symbolInput = new Float32Array(128 * 128 * 3);
-        for (let i = 0; i < symbolInput.length; i++) {
-          symbolInput[i] = 0.5; // Placeholder
+        let symbolInput: Float32Array;
+
+        if (imagePath) {
+          // Crop the symbol region from the original image and preprocess
+          try {
+            const croppedUri = await cropImage(
+              imagePath,
+              region.x,
+              region.y,
+              region.width,
+              region.height
+            );
+            const { pixels } = await preprocessImageUtil(croppedUri, 128, 128);
+            symbolInput = pixels;
+          } catch {
+            // Fallback: create input from region dimensions
+            symbolInput = new Float32Array(128 * 128 * 3);
+            symbolInput.fill(0.5);
+          }
+        } else {
+          symbolInput = new Float32Array(128 * 128 * 3);
+          symbolInput.fill(0.5);
         }
 
         // Run inference

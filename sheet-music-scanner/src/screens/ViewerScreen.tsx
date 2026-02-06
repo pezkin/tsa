@@ -17,6 +17,7 @@ import * as Sharing from 'expo-sharing';
 import Slider from '@react-native-community/slider';
 import { StorageService } from '@services/storage';
 import { ExportService } from '@services/export';
+import MIDIService from '@services/MIDIService';
 import { ScannedItem } from '@utils/types';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '@utils/constants';
 import { formatDuration, getTimeAgo } from '@utils/helpers';
@@ -36,6 +37,12 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  
+  // MIDI Service state
+  const [midiService] = useState(() => new MIDIService());
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [playbackDuration, setPlaybackDuration] = useState(0);
 
   useEffect(() => {
     loadItem();
@@ -44,6 +51,38 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
       title: '',
     });
   }, []);
+
+  // Load MIDI when item is loaded
+  useEffect(() => {
+    if (item?.musicData) {
+      loadMIDI();
+    }
+    
+    return () => {
+      midiService.cleanup();
+    };
+  }, [item]);
+
+  const loadMIDI = async () => {
+    try {
+      if (!item?.musicData) return;
+      
+      // Export music data to MIDI
+      const midiBase64 = await ExportService.exportToMIDI(item.musicData);
+      await midiService.loadMIDI(midiBase64);
+      setPlaybackDuration(midiService.getDuration());
+      
+      // Subscribe to status updates
+      const unsubscribe = midiService.onStatusChange((info) => {
+        setIsPlaying(info.isPlaying);
+        setPlaybackPosition(info.currentPosition);
+      });
+      
+      return unsubscribe;
+    } catch (error) {
+      console.error('Failed to load MIDI:', error);
+    }
+  };
 
   const loadItem = async () => {
     try {
@@ -67,8 +106,16 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
   };
 
   const togglePlayback = async () => {
-    // TODO: Integrate MIDIService for actual playback
-    console.log('Playback toggle - MIDIService integration pending');
+    try {
+      if (isPlaying) {
+        await midiService.pause();
+      } else {
+        await midiService.play();
+      }
+    } catch (error) {
+      console.error('Playback error:', error);
+      Alert.alert('Playback Error', 'Failed to play audio');
+    }
   };
 
   const handleShare = () => {
@@ -245,16 +292,49 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
 
             {/* Additional Metadata */}
             <View style={styles.metadataGrid}>
+              {item.musicData.timeSignature && (
+                <View style={styles.metadataItem}>
+                  <MaterialCommunityIcons name="music-note" size={20} color={COLORS.primary} style={styles.metadataIcon} />
+                  <View>
+                    <Text style={styles.metadataLabel}>Time Signature</Text>
+                    <Text style={styles.metadataValue}>{item.musicData.timeSignature}</Text>
+                  </View>
+                </View>
+              )}
+              {item.musicData.key && (
+                <View style={styles.metadataItem}>
+                  <MaterialCommunityIcons name="music-clef-treble" size={20} color={COLORS.primary} style={styles.metadataIcon} />
+                  <View>
+                    <Text style={styles.metadataLabel}>Key Signature</Text>
+                    <Text style={styles.metadataValue}>{item.musicData.key}</Text>
+                  </View>
+                </View>
+              )}
+              {item.musicData.measures && (
+                <View style={styles.metadataItem}>
+                  <MaterialCommunityIcons name="format-list-numbered" size={20} color={COLORS.primary} style={styles.metadataIcon} />
+                  <View>
+                    <Text style={styles.metadataLabel}>Measures</Text>
+                    <Text style={styles.metadataValue}>{item.musicData.measures.length}</Text>
+                  </View>
+                </View>
+              )}
               {item.musicData.noteCount && (
                 <View style={styles.metadataItem}>
-                  <Text style={styles.metadataLabel}>Notes Detected</Text>
-                  <Text style={styles.metadataValue}>{item.musicData.noteCount}</Text>
+                  <MaterialCommunityIcons name="music-note-eighth" size={20} color={COLORS.primary} style={styles.metadataIcon} />
+                  <View>
+                    <Text style={styles.metadataLabel}>Notes Detected</Text>
+                    <Text style={styles.metadataValue}>{item.musicData.noteCount}</Text>
+                  </View>
                 </View>
               )}
               {item.processingTime && (
                 <View style={styles.metadataItem}>
-                  <Text style={styles.metadataLabel}>Processing Time</Text>
-                  <Text style={styles.metadataValue}>{item.processingTime}ms</Text>
+                  <MaterialCommunityIcons name="clock-outline" size={20} color={COLORS.primary} style={styles.metadataIcon} />
+                  <View>
+                    <Text style={styles.metadataLabel}>Processing Time</Text>
+                    <Text style={styles.metadataValue}>{item.processingTime}ms</Text>
+                  </View>
                 </View>
               )}
             </View>
@@ -271,7 +351,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
             onPress={togglePlayback}
           >
             <MaterialIcons
-              name={'play-arrow'}
+              name={isPlaying ? 'pause' : 'play-arrow'}
               size={40}
               color="white"
             />
@@ -279,21 +359,25 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
 
           {/* Progress Bar */}
           <View style={styles.progressContainer}>
-            <Text style={styles.timeText}>
-              {formatDuration(currentTime)}
-            </Text>
+            <View style={styles.timeRow}>
+              <Text style={styles.timeText}>
+                {MIDIService.formatTime(playbackPosition)}
+              </Text>
+              <Text style={styles.timeText}>
+                {MIDIService.formatTime(playbackDuration)}
+              </Text>
+            </View>
             <Slider
               style={styles.slider}
-              value={currentTime}
-              onValueChange={setCurrentTime}
+              value={playbackPosition}
+              onValueChange={(value) => {
+                midiService.seek(value);
+              }}
               minimumValue={0}
-              maximumValue={60000}
+              maximumValue={playbackDuration}
               minimumTrackTintColor={COLORS.primary}
               maximumTrackTintColor={COLORS.border}
             />
-            <Text style={styles.timeText}>
-              {formatDuration(60000)}
-            </Text>
           </View>
 
           {/* Speed Control */}
@@ -307,7 +391,10 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
                     styles.speedButton,
                     playbackSpeed === speed && styles.speedButtonActive,
                   ]}
-                  onPress={() => setPlaybackSpeed(speed)}
+                  onPress={async () => {
+                    setPlaybackSpeed(speed);
+                    await midiService.setPlaybackSpeed(speed);
+                  }}
                 >
                   <Text
                     style={[
@@ -577,6 +664,11 @@ const styles = StyleSheet.create({
   progressContainer: {
     gap: SPACING.md,
   },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.xs,
+  },
   timeText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
@@ -708,15 +800,21 @@ const styles = StyleSheet.create({
   },
   metadataGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: SPACING.md,
   },
   metadataItem: {
-    flex: 1,
+    flex: 0.48,
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: SPACING.md,
     backgroundColor: 'white',
     borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  metadataIcon: {
+    marginRight: SPACING.sm,
   },
   metadataLabel: {
     ...TYPOGRAPHY.caption,
@@ -724,9 +822,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   metadataValue: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.primary,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.body1,
+    color: COLORS.text,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,

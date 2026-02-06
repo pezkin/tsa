@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   SafeAreaView,
@@ -39,7 +39,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
   const [exportProgress, setExportProgress] = useState(0);
   
   // MIDI Service state
-  const [midiService] = useState(() => new MIDIService());
+  const midiService = useRef(new MIDIService()).current;
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [playbackDuration, setPlaybackDuration] = useState(0);
@@ -54,16 +54,23 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
 
   // Load MIDI when item is loaded
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    
     if (item?.musicData) {
-      loadMIDI();
+      loadMIDI().then((unsub) => {
+        unsubscribe = unsub;
+      });
     }
     
     return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
       midiService.cleanup();
     };
   }, [item]);
 
-  const loadMIDI = async () => {
+  const loadMIDI = async (): Promise<(() => void) | undefined> => {
     try {
       if (!item?.musicData) return;
       
@@ -81,6 +88,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
       return unsubscribe;
     } catch (error) {
       console.error('Failed to load MIDI:', error);
+      return undefined;
     }
   };
 
@@ -370,7 +378,7 @@ const ViewerScreen: React.FC<ViewerScreenProps> = ({ route, navigation }) => {
             <Slider
               style={styles.slider}
               value={playbackPosition}
-              onValueChange={(value) => {
+              onSlidingComplete={(value) => {
                 midiService.seek(value);
               }}
               minimumValue={0}

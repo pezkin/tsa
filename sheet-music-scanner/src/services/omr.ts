@@ -1,6 +1,7 @@
 import { Alert } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { MusicData, Measure, Note } from '@utils/types';
+import { OMRService as OMRTFLiteService, OMRProcessingOptions as TFLiteOMRProcessingOptions } from './omr-tflite';
 
 export interface OMRResponse {
   success: boolean;
@@ -14,15 +15,40 @@ export interface OMRProcessingOptions {
   enhanceImage?: boolean;
   language?: 'en' | 'es' | 'fr' | 'de';
   returnConfidence?: boolean;
+  onProgress?: (message: string, progress: number) => void;
+  returnDetails?: boolean;
+  confidenceThreshold?: number;
 }
 
 /**
  * Optical Music Recognition Service
- * Handles integration with OMR APIs and processing
+ * Handles integration with OMR APIs and offline TFLite processing
  */
 export class OMRService {
   private static readonly CUSTOM_OMR_API = process.env.EXPO_PUBLIC_OMR_API_URL || 'https://your-omr-api.com/api/recognize';
   
+  /**
+   * Initialize the offline TFLite OMR service and load models
+   */
+  static async initialize(progressCallback?: (message: string) => void): Promise<void> {
+    return OMRTFLiteService.initialize(progressCallback);
+  }
+
+  /**
+   * Scan sheet music using offline TFLite models
+   */
+  static async scanSheetMusic(
+    imagePath: string,
+    options: OMRProcessingOptions = {}
+  ): Promise<OMRResponse> {
+    const tfliteOptions: TFLiteOMRProcessingOptions = {
+      onProgress: options.onProgress,
+      returnDetails: options.returnDetails,
+      confidenceThreshold: options.confidenceThreshold,
+    };
+    return OMRTFLiteService.scanSheetMusic(imagePath, tfliteOptions);
+  }
+
   /**
    * Process image through OMR
    * Currently uses cloud-based approach

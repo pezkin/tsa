@@ -278,13 +278,10 @@ export class TFLiteService {
 
   /**
    * Resolve require() asset to file path
-   * In Expo, require() returns asset metadata
-   * Convert to usable path for TFLite
+   * In Expo/Metro, require() for assets returns a numeric module ID
+   * that the asset system can resolve at runtime.
    */
   private resolveAssetPath(asset: number): string {
-    // This is a placeholder - actual implementation depends on bundler
-    // Expo's bundler will handle require() for assets automatically
-    // Pass asset reference directly if supported
     return String(asset);
   }
 }

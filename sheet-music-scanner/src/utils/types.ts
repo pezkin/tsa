@@ -41,6 +41,7 @@ export interface Note {
   accidental?: 'sharp' | 'flat' | 'natural';
   dynamics?: string;
   articulation?: string;
+  confidence?: number;
 }
 
 export interface AppSettings {

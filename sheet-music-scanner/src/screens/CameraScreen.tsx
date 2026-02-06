@@ -18,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { COLORS, SPACING, BORDER_RADIUS } from '@utils/constants';
 import { getButtonAccessibility, getTestID } from '@utils/accessibilityUtils';
 import { OMRService } from '@services/omr';
+import { StorageService } from '@services/storage';
 
 const { width } = Dimensions.get('window');
 
@@ -142,13 +143,25 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ navigation }) => {
       });
 
       if (result.success && result.musicData) {
-        // Success! Navigate to editor with scanned music data
+        // Success! Save to storage and navigate to viewer
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         
-        navigation.navigate('ImageEditor', {
-          imageUri: previewImage,
-          omrResult: result,
-        });
+        // Save to storage
+        const scanData = {
+          id: Date.now().toString(),
+          filename: `scan_${Date.now()}.jpg`,
+          imagePath: previewImage,
+          thumbnail: previewImage,
+          musicData: result.musicData,
+          confidence: result.confidence || 0,
+          dateScanned: Date.now(),
+          processingTime: result.processingTime || 0,
+          playCount: 0,
+          notes: '',
+        };
+        
+        await StorageService.addScannedItem(scanData);
+        navigation.navigate('Viewer', { itemId: scanData.id });
       } else {
         // Retry option for failed scans
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);

@@ -5,12 +5,12 @@
   "description": "Tsali Scanner - Sheet Music Recognition App",
   "author": "Pezkin.Dev",
   "scripts": {
-    "start": "expo start",
+    "start": "npx expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint",
+    "android": "npx expo start --android",
+    "ios": "npx expo start --ios",
+    "web": "npx expo start --web",
+    "lint": "npx expo lint",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
